@@ -12,11 +12,12 @@ require('./db/setup');
 
 const Pizza = require('./models/pizza');
 const Topping = require('./models/topping');
+const Pizza_Topping = require('./models/pizza_topping');
 
 // configure app to use bodyParser()
 // this will let us get the data from a POST
 app.use(cors());
-app.use(bodyParser.urlencoded({ extended: true }));
+// app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 var port = process.env.PORT || 8080;        // set our port
@@ -38,14 +39,92 @@ router.get('/', function(req, res) {
 
 router.route('/pizzas')
   .get(async function (req, res) {
-    res.send(await Pizza.query().eager('toppings'));
+    const pizza = await Pizza
+    .query()
+    .eager('toppings');
+    if (pizza === undefined){
+      res.send(404);
+    }
+    res.send(pizza);
   })
-  .post(function (req, res) {
-    res.send('Add a book')
+  .post(async function (req, res) {
+    const name = req.body.name;
+    const toppings = req.body.toppings || [];
+    // create pizza
+    const pizza = await Pizza
+    .query()
+    .insert({name});
+    // create toppings
+    toppings.forEach(async (topping) => {
+      await Pizza_Topping
+      .query()
+      .insert({
+        pizza: pizza.id,
+        topping: topping.id
+      });
+    });
+    // get pizza
+    const fetch = await Pizza.query().findById(pizza.id).eager('toppings');
+    res.send(fetch);
+  });
+
+router.route('/pizzas/:id')
+  .get(async function (req, res) {
+    const id = req.params.id;
+    const pizza = await Pizza
+    .query()
+    .findById(id)
+    .eager('toppings');
+    if (pizza === undefined){
+      res.send(404);
+    }
+    res.send(pizza);
   })
-  .put(function (req, res) {
-    res.send('Update the book')
+  .put(async function (req, res) {
+    const id = req.params.id;
+    const name = req.body.name;
+    const toppings = req.body.toppings || [];
+    // update name
+    const pizza = await Pizza
+    .query()
+    .patchAndFetchById(id,{name})
+    .eager('toppings');
+    // delete toppings by pizza
+    const deletes = await Pizza_Topping
+    .query()
+    .delete()
+    .where('pizza', '=', pizza.id);
+    // create news toppings
+    toppings.forEach(async (topping) => {
+      await Pizza_Topping
+      .query()
+      .insert({
+        pizza: pizza.id,
+        topping: topping.id
+      });
+    });
+    // fetch
+    const fetch = await Pizza.query().findById(pizza.id).eager('toppings');
+    res.send(fetch);
   })
+  .delete(async function (req, res) {
+    const id = req.params.id;
+    // get pizza
+    const pizza = await Pizza
+    .query()
+    .findById(id)
+    .eager('toppings');
+    // delete toppings
+    const result = await Pizza_Topping
+    .query()
+    .delete()
+    .where('pizza', '=', pizza.id);
+    // delete pizza
+    const fetch = await Pizza
+    .query()
+    .deleteById(pizza.id);
+    res.sendStatus(200);
+  });
 
 router.route('/toppings')
   .get(async function (req, res) {
